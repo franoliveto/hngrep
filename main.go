@@ -86,7 +86,7 @@ func main() {
 		close(c)
 	}()
 	for item := range c {
-		fmt.Println(&item)
+		fmt.Println(item)
 	}
 }
 
