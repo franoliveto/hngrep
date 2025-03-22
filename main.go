@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// hngrep prints [Hacker News](https://news.ycombinator.com/) stories that match a PATTERN.
+// hngrep uses the Hacker News API from the command line to print stories that
+// match a PATTERN.
+// https://github.com/HackerNews/API
+
 package main
 
 import (
