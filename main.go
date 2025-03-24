@@ -12,12 +12,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
 	"strconv"
-	"sync"
 )
 
 type item struct {
@@ -38,10 +38,6 @@ type item struct {
 	Descendants int // in the case of stories or polls, the total comment count.
 }
 
-func (i item) String() string {
-	return fmt.Sprintf("%s\n%s", i.Title, i.URL)
-}
-
 const basePath = "https://hacker-news.firebaseio.com/v0"
 
 var (
@@ -50,7 +46,7 @@ var (
 	best = flag.Bool("best", false, "best stories")
 )
 
-// TODO: handle error conditions.
+// TODO: handle errors.
 func main() {
 	log.SetFlags(0)
 	flag.Parse()
@@ -78,31 +74,62 @@ func main() {
 	_ = json.NewDecoder(resp.Body).Decode(&itemIDs)
 	resp.Body.Close()
 	c := make(chan item, len(itemIDs))
-	var gw sync.WaitGroup
 	for _, id := range itemIDs {
-		gw.Add(1)
 		url := basePath + "/item/" + strconv.Itoa(id) + ".json"
-		go search(url, pattern, &gw, c)
+		go fetch(url, c)
 	}
-	go func() {
-		gw.Wait()
-		close(c)
-	}()
-	for item := range c {
-		fmt.Println(item)
+
+	type searchResult struct {
+		Total int
+		Items []item
+	}
+	search := func(pattern string) (*searchResult, error) {
+		var items []item
+		for range itemIDs {
+			item := <-c
+			matched, _ := regexp.MatchString(pattern, item.Title)
+			if matched {
+				items = append(items, item)
+			}
+		}
+		return &searchResult{Total: len(items), Items: items}, nil
+	}
+	result, err := search(pattern)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	const templ = `
+	<h1>{{.Total}} Hacker News stories</h1>
+	<table style='border-spacing: 5px'>
+	<tr style='text-align: left'>
+		<th>#</th>
+		<th>points</th>
+		<th>comments</th>
+		<th>author</th>
+		<th>title</th>
+	</tr>
+	{{range .Items}}
+	<tr>
+		<td>{{.ID}}</td>
+		<td>{{.Score}}</td>
+		<td>{{.Descendants}}</td>
+		<td>{{.By}}</td>
+		<td><a href='{{.URL}}'>{{.Title}}</a></td>
+	</tr>
+	{{end}}
+	</table>
+	`
+	t := template.Must(template.New("news").Parse(templ))
+	if err := t.Execute(os.Stdout, result); err != nil {
+		log.Fatal(err)
 	}
 }
 
-// search queries for the item represented by url, and sends it to channel c if
-// it matches the pattern.
-func search(url string, pattern string, gw *sync.WaitGroup, c chan<- item) {
-	defer gw.Done()
+func fetch(url string, c chan<- item) {
 	resp, _ := http.Get(url)
 	defer resp.Body.Close()
 	var item item
 	_ = json.NewDecoder(resp.Body).Decode(&item)
-	matched, _ := regexp.MatchString(pattern, item.Title)
-	if matched {
-		c <- item
-	}
+	c <- item
 }
