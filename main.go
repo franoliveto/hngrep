@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// hngrep uses the Hacker News API from the command line to print stories that
+// news uses the Hacker News API from the command line to print stories that
 // match a PATTERN.
 // https://github.com/HackerNews/API
 
@@ -55,7 +55,7 @@ func main() {
 	log.SetFlags(0)
 	flag.Parse()
 	if len(flag.Args()) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: hngrep [options] PATTERN")
+		fmt.Fprintln(os.Stderr, "Usage: news [options] PATTERN")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
