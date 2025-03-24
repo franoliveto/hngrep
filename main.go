@@ -57,35 +57,27 @@ func main() {
 	}
 	pattern := flag.Arg(0)
 
-	url := basePath
+	var which string
 	switch {
 	case *news:
-		url += "/newstories.json"
+		which = "new"
 	case *top:
-		url += "/topstories.json"
+		which = "top"
 	case *best:
-		url += "/beststories.json"
+		which = "best"
 	}
-	resp, err := http.Get(url)
+	stories, err := getStories(which)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var itemIDs []int
-	_ = json.NewDecoder(resp.Body).Decode(&itemIDs)
-	resp.Body.Close()
-	c := make(chan item, len(itemIDs))
-	for _, id := range itemIDs {
+	c := make(chan item, len(stories))
+	for _, id := range stories {
 		url := basePath + "/item/" + strconv.Itoa(id) + ".json"
 		go fetch(url, c)
 	}
-
-	type searchResult struct {
-		Total int
-		Items []item
-	}
 	search := func(pattern string) (*searchResult, error) {
 		var items []item
-		for range itemIDs {
+		for range stories {
 			item := <-c
 			matched, _ := regexp.MatchString(pattern, item.Title)
 			if matched {
@@ -98,32 +90,55 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	const templ = `
-	<h1>{{.Total}} Hacker News stories</h1>
-	<table style='border-spacing: 5px'>
-	<tr style='text-align: left'>
-		<th>#</th>
-		<th>points</th>
-		<th>comments</th>
-		<th>author</th>
-		<th>title</th>
-	</tr>
-	{{range .Items}}
-	<tr>
-		<td>{{.ID}}</td>
-		<td>{{.Score}}</td>
-		<td>{{.Descendants}}</td>
-		<td>{{.By}}</td>
-		<td><a href='{{.URL}}'>{{.Title}}</a></td>
-	</tr>
-	{{end}}
-	</table>
-	`
-	t := template.Must(template.New("news").Parse(templ))
-	if err := t.Execute(os.Stdout, result); err != nil {
+	if err := print(result); err != nil {
 		log.Fatal(err)
 	}
+}
+
+type searchResult struct {
+	Total int
+	Items []item
+}
+
+func print(r *searchResult) error {
+	const templ = `
+<h1>{{.Total}} Hacker News stories</h1>
+<table style='border-spacing: 5px'>
+<tr style='text-align: left'>
+	<th>#</th>
+	<th>points</th>
+	<th>comments</th>
+	<th>author</th>
+	<th>title</th>
+</tr>
+{{range .Items}}
+<tr>
+	<td>{{.ID}}</td>
+	<td>{{.Score}}</td>
+	<td>{{.Descendants}}</td>
+	<td>{{.By}}</td>
+	<td><a href='{{.URL}}'>{{.Title}}</a></td>
+</tr>
+{{end}}
+</table>
+`
+	t := template.Must(template.New("").Parse(templ))
+	if err := t.Execute(os.Stdout, r); err != nil {
+		return err
+	}
+	return nil
+}
+
+func getStories(which string) ([]int, error) {
+	url := "https://hacker-news.firebaseio.com/v0/" + which + "stories.json"
+	var stories []int
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&stories)
+	resp.Body.Close()
+	return stories, nil
 }
 
 func fetch(url string, c chan<- item) {
