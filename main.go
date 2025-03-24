@@ -33,7 +33,7 @@ type item struct {
 	Kids        []int  // the ids of the item's comments, in ranked display order.
 	URL         string // the URL of the story
 	Score       int
-	Title       string // the title of the story, poll or job. HTML.
+	Title       template.HTML // the title of the story, poll or job. HTML.
 	Parts       []int
 	Descendants int // in the case of stories or polls, the total comment count.
 }
@@ -82,7 +82,7 @@ func main() {
 			if r.err != nil {
 				return nil, r.err
 			}
-			matched, _ := regexp.MatchString(pattern, r.item.Title)
+			matched, _ := regexp.MatchString(pattern, string(r.item.Title))
 			if matched {
 				items = append(items, r.item)
 			}
