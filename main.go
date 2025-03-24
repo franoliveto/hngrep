@@ -46,7 +46,6 @@ var (
 	best = flag.Bool("best", false, "best stories")
 )
 
-// TODO: handle errors.
 func main() {
 	log.SetFlags(0)
 	flag.Parse()
@@ -70,18 +69,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	c := make(chan item, len(stories))
+	c := make(chan fetchResult, len(stories))
 	for _, id := range stories {
 		url := basePath + "/item/" + strconv.Itoa(id) + ".json"
 		go fetch(url, c)
 	}
+
 	search := func(pattern string) (*searchResult, error) {
 		var items []item
 		for range stories {
-			item := <-c
-			matched, _ := regexp.MatchString(pattern, item.Title)
+			r := <-c
+			if r.err != nil {
+				return nil, r.err
+			}
+			matched, _ := regexp.MatchString(pattern, r.item.Title)
 			if matched {
-				items = append(items, item)
+				items = append(items, r.item)
 			}
 		}
 		return &searchResult{Total: len(items), Items: items}, nil
@@ -136,15 +139,29 @@ func getStories(which string) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&stories)
-	resp.Body.Close()
+	defer resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(&stories)
+	if err != nil {
+		return nil, err
+	}
 	return stories, nil
 }
 
-func fetch(url string, c chan<- item) {
-	resp, _ := http.Get(url)
+type fetchResult struct {
+	item
+	err error
+}
+
+func fetch(url string, c chan<- fetchResult) {
+	resp, err := http.Get(url)
+	if err != nil {
+		c <- fetchResult{err: fmt.Errorf("fetch: %v", err)}
+	}
 	defer resp.Body.Close()
 	var item item
-	_ = json.NewDecoder(resp.Body).Decode(&item)
-	c <- item
+	err = json.NewDecoder(resp.Body).Decode(&item)
+	if err != nil {
+		c <- fetchResult{err: fmt.Errorf("fetch: %v", err)}
+	}
+	c <- fetchResult{item: item}
 }
