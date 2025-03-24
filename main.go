@@ -125,6 +125,7 @@ func print(r *searchResult) error {
 {{end}}
 </table>
 `
+	// TODO: add column "time".
 	t := template.Must(template.New("").Parse(templ))
 	if err := t.Execute(os.Stdout, r); err != nil {
 		return err
